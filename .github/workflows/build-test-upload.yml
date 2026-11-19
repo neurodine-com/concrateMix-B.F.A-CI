@@ -92,13 +92,16 @@ jobs:
           path: ./bin
 
       - name: Build Digger Craft Environment for Testing if NOT malicious
-        run: docker build -t digger-unformal-collision-container -f unreal-BFA/Dockerfile .
+        run: docker build -t digger-unformal-collision-container \
+             -f unreal-BFA/Dockerfile \
+             -param 
+             .
 
       - name: Run systemd service and verify stdin/stdout
         run: |
           set -e
 
-          # 1. Start kontenera z systemd w tle
+          # 1. Starting containser with systemd in the background
           docker run -d \
             --name digger-collision-unit \
             --privileged \
@@ -109,13 +112,40 @@ jobs:
             -v "$(pwd)/bin/nugget:/usr/local/bin/my_program:ro" \
             digger-unformal-collision-container
 
-          # Gwarancja usunięcia kontenera po zakończeniu kroku
+          # Trap for removing container after the step is finished
           trap "docker rm -f systemd-unit-runner >/dev/null 2>&1 || true" EXIT
+          # TODO: A trap solutions is EXTREMLY shitty idea - offcoruse a AI suggestion
+          #       this must change as is histerically and historically stupid as hell !!
 
-          # 2. Oczekiwanie na gotowość systemd
+          # 2. Another tootaly wicekd ansd stupid approach for checking systemd avaiabiliy
           docker exec systemd-unit-runner systemctl is-system-running --wait || true
-
-          # 3. Utworzenie usługi systemd z przekierowaniem stdin/stdout przez potoki FIFO
+          # TODO:   Why to hell wait for it to start on OUTSIDE of the container?
+          #         The rest of functionality should simply happen exactly at the 
+          #         dawn of the container raising  - it's best known to be UP for INTERNAL serviocesss
+          #         why AI is so freking stupid thinking in paths like this.. ???
+          # TODO:   Do not waste time on dynamic unit creation and ALL the systemct daemon reload which is very freking 
+          #         stupid and CPU prone - better to inclusde in the Dockerfile the exact unit file
+          #         alread being ready on systemd start (AND not in /etc/systemd/systes path as
+          #          it is yet another AI stupid sugestion)
+          #         The docker image should comprise of all the includes and functinality ready to 
+          #         witnes the incomming ELF executable and to use it's decoded BODY in being
+          #         run fronm unit that reads the decoded BODY and NEVER drops it into a FILE (not needed!)
+          #         This can be actually read from curl as base64, then DE-gziped and then piped into unix socket
+          #         for a systemd's dynamic unit execution of sth being read from unix socket transposed from network socket.
+          #         Next, this would be fed with only one (or more) ASSERT-lines from a CSV file already present, or piped.
+          #         This could/should run inside a well writen SHEL program having nondefaul MAIN function - waiting, present inside Dockerfile, added during container build
+          #         Why bindmount EXE as RO ?! Do they train AI on ideas that seem to have THE BIGGEST possibility
+          #         of being hacked... I relally can not understand it.
+          #         So mnyny AI stupid ideas in one propmpt response! \
+          #         It is so ismple to see that build makes a ELF files and runs this files. A maliciouis code WILL
+          #         for SURE happen to be uploaded by some brainiacs!
+          #         Why AI suggests to expose this code into a well knows PATH location - a file with a user +x on it ?!?!?!?!
+         
+          
+          # The below code has to go sirious NEVER-USE-IT-LIKE-THIS modifications towards
+          # being implemented as a WHOLE in dockrefile, so the below code is a DUMP, to be trashed... translating anyway.
+          #
+          # 3. Creating systemd unit with redirection: stdin/stdout threwout named FIFO
           docker exec systemd-unit-runner bash -c '
             mkfifo /run/app.in /run/app.out
             cat <<EOF > /etc/systemd/system/my-program.service
@@ -132,33 +162,33 @@ jobs:
             systemctl start my-program.service
           '
 
-          # 4. Wysłanie danych "2, 2, 1, 1" na stdin i odczyt ze stdout z limitem 2 sekund
+          # 4. Call program logic on data "2, 2, 1, 1" on it's stdin with a paramed timeout on the program 
           OUTPUT=$(docker exec systemd-unit-runner bash -c '
-            # Otwarcie deskryptorów w tle, aby zapis nie zablokował odczytu
+            # Open descriptors in the background, for a write operation not to block read operation ?????
             exec 3>/run/app.in
             echo "2, 2, 1, 1" >&3
             exec 3>&-
 
-            # Odczyt jednej linii z twardym timeoutem 2 sekund
+            # Hard timeout on the read
             timeout 2s head -n 1 < /run/app.out
           ')
 
-          echo "Otrzymany wynik ze stdout: '$OUTPUT'"
+          echo "Program logic returns data:'$OUTPUT'" >&2 || :;
 
-          # 5. Walidacja formatu (4 liczby z zakresu 3..10 rozdzielone przecinkiem i spacją)
+          # 5. Validating the OUTPUT data format:
+          #     it should comprise from 4 numbers, in range from 3..10 (this is to be not strict boundry like here)
           if [[ ! "$OUTPUT" =~ ^([3-9]|10),\ ([3-9]|10),\ ([3-9]|10),\ ([3-9]|10)$ ]]; then
-            echo "BŁĄD: Nieprawidłowy format lub wartości poza zakresem 3-10! Otrzymano: '$OUTPUT'"
+            echo "ERROR: Incorect format or value out of range." >&2 || :;
             docker exec systemd-unit-runner journalctl -u my-program.service --no-pager
             exit 1
           fi
 
-          echo "SUKCES: Program zwrócił poprawne dane w czasie poniżej 2 sekund."
+          echo "SUCCESS: This program is a True GoldDigger - data are correct." >&2 || :;
 
       - name: Deploy solidified binary
         uses: actions/upload-artifact@v4
         with:
           name: listit-nugget
-          # Zmień ścieżkę na faktyczną nazwę/lokalizację pliku wyjściowego z Makefile
           path: ./build/nugget
 
 
